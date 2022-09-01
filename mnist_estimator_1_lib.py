@@ -94,30 +94,33 @@ def model_fn(features, labels, mode, params):
     tf.keras.backend.set_floatx('float16')
 
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Flatten(input_shape=(28,28,1)),
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dense(10, activation='sigmoid')
+        #tf.keras.layers.Flatten(input_shape=(28,28,1)),
+        #tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Conv2D(32, 3, dilation_rate=(2,2), activation='relu', input_shape=(28,28,1)),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(10, activation='linear')
     ])
 
     if mode == tf.estimator.ModeKeys.TRAIN:
-        preds = model(features, training=True)
+        logits = model(features, training=True)
         optimizer = tf.compat.v1.train.AdamOptimizer()
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=False)(labels, preds)
+        loss_op = tf.reduce_mean(
+            tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=labels, logits=logits))
         return tf.estimator.EstimatorSpec(
             mode=mode,
-            loss=loss,
+            loss=loss_op,
             train_op = optimizer.minimize(
-                loss, tf.compat.v1.train.get_or_create_global_step())
+                loss_op, tf.compat.v1.train.get_or_create_global_step())
         )
     elif mode == tf.estimator.ModeKeys.PREDICT:
-        preds = model(features, training=True)
+        preds = tf.nn.softmax(model(features, training=True))
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions=preds
         )
     elif mode == tf.estimator.ModeKeys.EVAL:
-        preds = model(features, training=True)
+        preds = tf.nn.softmax(model(features, training=True))
         loss = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=False)(labels, preds)
         acc = tf.compat.v1.metrics.accuracy(labels, tf.argmax(preds, axis=-1))
