@@ -1,6 +1,9 @@
 import tensorflow as tf
 from tensorflow.keras.mixed_precision.experimental import Policy
 import tensorflow_datasets as tfds
+from modelzoo.common.tf.layers.DenseLayer import DenseLayer
+from modelzoo.common.tf.layers.ReshapeLayer import ReshapeLayer
+from cerebras.tf.cs_model_to_estimator import KerasModelToModelFn
 
 
 def input_fn(mode, params={}, input_context=None):
@@ -14,7 +17,7 @@ def input_fn(mode, params={}, input_context=None):
         (info.splits['train'].num_examples if mode == tf.estimator.ModeKeys.TRAIN else info.splits['test'].num_examples)
 
     def normalize_img(image, label):
-        return tf.cast(image, tf.float32) / 255., tf.cast(label, tf.int32)
+        return tf.cast(image, tf.float16) / 255., tf.cast(label, tf.int32)
 
     mnist_dataset = mnist_dataset.map(
         normalize_img,
@@ -87,19 +90,51 @@ def test_input_fn(params={}, input_context=None):
     return mnist_dataset.cache().batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE).repeat()
 
 
+def build_model_fn():
+    # Try to set float16 policy
+    dtype = Policy('mixed_float16', loss_scale=None)
+    tf.keras.mixed_precision.experimental.set_policy(dtype)
+    #tf.keras.backend.set_floatx('float16')
+
+    model = tf.keras.models.Sequential([
+        #ReshapeLayer((28*28*1,), input_shape=(28,28,1)),
+        DenseLayer(128, activation='relu'),
+        DenseLayer(10, activation='linear')
+    ])
+
+    return KerasModelToModelFn(model)
+
+
 def model_fn(features, labels, mode, params):
     # Try to set float16 policy
     dtype = Policy('mixed_float16', loss_scale=None)
     tf.keras.mixed_precision.experimental.set_policy(dtype)
-    tf.keras.backend.set_floatx('float16')
+    #tf.keras.backend.set_floatx('float16')
+
+    #inp = tf.keras.layers.Input((28,28,1))
+    #last_layer = inp
+    #last_layer = tf.keras.layers.Flatten()(last_layer)
+    #last_layer = DenseLayer(128, activation='relu')(last_layer)
+    #last_layer = DenseLayer(10, activation='linear')(last_layer)
 
     model = tf.keras.models.Sequential([
         #tf.keras.layers.Flatten(input_shape=(28,28,1)),
+        #ReshapeLayer((28*28*1,), input_shape=(28,28,1)),
+        tf.keras.layers.Dense(128, activation='relu'),
         #tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Conv2D(32, 3, dilation_rate=(2,2), activation='relu', input_shape=(28,28,1)),
-        tf.keras.layers.Flatten(),
+        #tf.keras.layers.Conv2D(32, 3, dilation_rate=(2,2), activation='relu', input_shape=(28,28,1)),
+        #tf.keras.layers.Flatten(),
+        #tf.keras.layers.Dense(10, activation='linear')
         tf.keras.layers.Dense(10, activation='linear')
     ])
+
+    #model = tf.keras.Model(
+    #   inputs=inp,
+    #   outputs=last_layer)
+
+    #def mdl(feat, training=False):
+    #    temp = tf.reshape(feat, (28*28*1,))
+    #    tf.nn.
 
     if mode == tf.estimator.ModeKeys.TRAIN:
         logits = model(features, training=True)
@@ -107,11 +142,12 @@ def model_fn(features, labels, mode, params):
         loss_op = tf.reduce_mean(
             tf.nn.sparse_softmax_cross_entropy_with_logits(
                 labels=labels, logits=logits))
+        train_op = optimizer.minimize(
+            loss_op, tf.compat.v1.train.get_or_create_global_step())
         return tf.estimator.EstimatorSpec(
             mode=mode,
             loss=loss_op,
-            train_op = optimizer.minimize(
-                loss_op, tf.compat.v1.train.get_or_create_global_step())
+            train_op=train_op,
         )
     elif mode == tf.estimator.ModeKeys.PREDICT:
         preds = tf.nn.softmax(model(features, training=True))

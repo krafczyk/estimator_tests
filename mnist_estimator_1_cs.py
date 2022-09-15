@@ -14,6 +14,7 @@ sys.path.append(os.environ['HOME'])
 
 
 from modelzoo.common.tf.estimator.cs_estimator import CerebrasEstimator
+from cerebras.tf.cs_model_to_estimator import KerasModelToCerebrasEstimator
 from modelzoo.common.tf.estimator.run_config import CSRunConfig
 from modelzoo.common.tf.estimator.utils import (
     cs_disable_summaries,
@@ -32,7 +33,8 @@ from modelzoo.fc_mnist.tf.utils import (
 )
 
 
-from mnist_estimator_1_lib import test_input_fn, train_input_fn, model_fn
+from mnist_estimator_1_lib import test_input_fn, train_input_fn, model_fn, build_model_fn
+import data
 
 
 _curdir = os.path.dirname(os.path.abspath(__file__))
@@ -204,6 +206,13 @@ def run(
         params=params,
     )
 
+    #est = KerasModelToCerebrasEstimator(
+    #    model_fn=build_model_fn(),
+    #    model_dir=runconfig_params["model_dir"],
+    #    config=est_config,
+    #    params=params,
+    #)
+
     # execute based on mode
     if runconfig_params["validate_only"] or runconfig_params["compile_only"]:
         if runconfig_params["mode"] == "train":
@@ -275,8 +284,9 @@ def main():
             args=args,
             params=params,
             model_fn=model_fn,
-            test_input_fn=test_input_fn,
-            train_input_fn=train_input_fn,
+            #test_input_fn=test_input_fn,
+            test_input_fn=data.eval_input_fn,
+            train_input_fn=data.train_input_fn,
         )
 
 
