@@ -285,8 +285,8 @@ def main():
             params=params,
             model_fn=model_fn,
             #test_input_fn=test_input_fn,
-            test_input_fn=data.eval_input_fn,
-            train_input_fn=data.train_input_fn,
+            test_input_fn=test_input_fn,
+            train_input_fn=train_input_fn,
         )
 
 

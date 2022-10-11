@@ -33,39 +33,73 @@ def input_fn(mode, params={}, input_context=None):
     if mode == tf.estimator.ModeKeys.TRAIN:
         # Repeat is insisted by CS
         # Drop remainder is insisted by CS as well.
-        return mnist_dataset.cache().shuffle(num_examples).batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE).repeat()
+        return mnist_dataset.cache() \
+                            .shuffle(num_examples) \
+                            .batch(batch_size, drop_remainder=True) \
+                            .prefetch(tf.data.experimental.AUTOTUNE) \
+                            .repeat()
     else:
         # Repeat is insisted by CS
         # Drop remainder is insisted by CS as well.
-        return mnist_dataset.cache().batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE).repeat()
+        return mnist_dataset.cache() \
+                            .batch(batch_size, drop_remainder=True) \
+                            .prefetch(tf.data.experimental.AUTOTUNE) \
+                            .repeat()
+
+
+def normalize_img_16(image, label):
+    return tf.cast(image, tf.float16) / 255., tf.cast(label, tf.int32)
+
+
+def normalize_img_32(image, label):
+    return tf.cast(image, tf.float32) / 255., tf.cast(label, tf.int32)
+
+
+def flatten(images, label):
+    batch_size = images.shape[0]
+    images = tf.reshape(images, [batch_size, -1])
+    return images, label
 
 
 def train_input_fn(params={}, input_context=None):
-    datasets, info = tfds.load(
-        name='mnist',
-        with_info=True,
-        as_supervised=True)
-    mnist_dataset = datasets['train']
-    num_examples = info.splits['train'].num_examples
+        # setting num_parallel_calls to 0 implies AUTOTUNE
+        num_parallel_calls = params.get("num_parallel_calls", 0)
+        if num_parallel_calls == 0:
+            num_parallel_calls = tf.data.experimental.AUTOTUNE
 
-    def normalize_img(image, label):
-        return tf.cast(image, tf.float32) / 255., tf.cast(label, tf.int32)
+        datasets, info = tfds.load(
+            name='mnist',
+            with_info=True,
+            as_supervised=True)
+        mnist_dataset = datasets['train']
+        num_examples = info.splits['train'].num_examples
 
-    mnist_dataset = mnist_dataset.map(
-        normalize_img,
-        num_parallel_calls=tf.data.experimental.AUTOTUNE
-    )
+        mnist_dataset = mnist_dataset.map(
+            normalize_img_16,
+            num_parallel_calls=num_parallel_calls
+        )
 
-    if input_context:
-        mnist_dataset = mnist_dataset.shard(
-            input_context.num_input_pipelines,
-            input_context.input_pipeline_id)
+        if input_context:
+            mnist_dataset = mnist_dataset.shard(
+                input_context.num_input_pipelines,
+                input_context.input_pipeline_id)
 
-    batch_size = 32
-    return mnist_dataset.cache().shuffle(num_examples).batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE).repeat()
+        batch_size = 32
+        mnist_dataset = mnist_dataset.cache() \
+                                     .shuffle(num_examples) \
+                                     .batch(batch_size, drop_remainder=True) \
+                                     .prefetch(tf.data.experimental.AUTOTUNE) \
+                                     .repeat()
+
+        return mnist_dataset
 
 
 def test_input_fn(params={}, input_context=None):
+    # setting num_parallel_calls to 0 implies AUTOTUNE
+    num_parallel_calls = params.get("num_parallel_calls", 0)
+    if num_parallel_calls == 0:
+        num_parallel_calls = tf.data.experimental.AUTOTUNE
+
     datasets, info = tfds.load(
         name='mnist',
         with_info=True,
@@ -73,12 +107,9 @@ def test_input_fn(params={}, input_context=None):
     mnist_dataset = datasets['test']
     num_examples = info.splits['test'].num_examples
 
-    def normalize_img(image, label):
-        return tf.cast(image, tf.float32) / 255., tf.cast(label, tf.int32)
-
     mnist_dataset = mnist_dataset.map(
-        normalize_img,
-        num_parallel_calls=tf.data.experimental.AUTOTUNE
+        normalize_img_16,
+        num_parallel_calls=num_parallel_calls
     )
 
     if input_context:
@@ -87,7 +118,12 @@ def test_input_fn(params={}, input_context=None):
             input_context.input_pipeline_id)
 
     batch_size = 32
-    return mnist_dataset.cache().batch(batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE).repeat()
+    mnist_dataset = mnist_dataset.cache() \
+                        .batch(batch_size, drop_remainder=True) \
+                        .prefetch(tf.data.experimental.AUTOTUNE) \
+                        .repeat()
+
+    return mnist_dataset
 
 
 def build_model_fn():
@@ -120,10 +156,10 @@ def model_fn(features, labels, mode, params):
     model = tf.keras.models.Sequential([
         #tf.keras.layers.Flatten(input_shape=(28,28,1)),
         #ReshapeLayer((28*28*1,), input_shape=(28,28,1)),
-        tf.keras.layers.Dense(128, activation='relu'),
         #tf.keras.layers.Dense(128, activation='relu'),
-        #tf.keras.layers.Conv2D(32, 3, dilation_rate=(2,2), activation='relu', input_shape=(28,28,1)),
-        #tf.keras.layers.Flatten(),
+        #tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Conv2D(32, 3, dilation_rate=(2,2), activation='relu', input_shape=(28,28,1)),
+        tf.keras.layers.Flatten(),
         #tf.keras.layers.Dense(10, activation='linear')
         tf.keras.layers.Dense(10, activation='linear')
     ])
