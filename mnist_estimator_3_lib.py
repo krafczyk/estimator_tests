@@ -160,31 +160,32 @@ def model_fn(features, labels, mode, params):
     tf.keras.mixed_precision.experimental.set_policy(dtype)
     #tf.keras.backend.set_floatx('float16')
 
-    inp = tf.keras.layers.Input((28*28, 1))
+    inp = tf.keras.layers.Input((28*28, 1), name='input')
     last_layer = inp
 
     # Attention layer
     at_layers = []
     num_heads = 4
     for i in range(num_heads):
-        q = tf.keras.layers.Dense(128//num_heads)(last_layer)
-        k = tf.keras.layers.Dense(128//num_heads)(last_layer)
-        v = tf.keras.layers.Dense(128//num_heads)(last_layer)
-        at_layers.append(tf.keras.layers.Attention()([q, k, v]))
+        q = tf.keras.layers.Dense(128//num_heads, name=f"q_{i}")(last_layer)
+        k = tf.keras.layers.Dense(128//num_heads, name=f"k_{i}")(last_layer)
+        v = tf.keras.layers.Dense(128//num_heads, name=f"v_{i}")(last_layer)
+        at_layers.append(tf.keras.layers.Attention(name=f"at_{i}")([q, k, v]))
     last_layer = tf.concat(at_layers, -1)
 
     # nonlinear expansion block
-    last_layer = tf.keras.layers.Dense(128*4, activation='relu')(last_layer)
-    last_layer = tf.keras.layers.Dense(128, activation='relu')(last_layer)
+    last_layer = tf.keras.layers.Dense(128*4, activation='relu', name="ex_1")(last_layer)
+    last_layer = tf.keras.layers.Dense(128, activation='relu', name="ex_2")(last_layer)
 
     # Classification head
-    last_layer = tf.keras.layers.Flatten()(last_layer)
-    last_layer = tf.keras.layers.Dense(10, activation='linear')(last_layer)
+    last_layer = tf.keras.layers.Flatten(name="flatten")(last_layer)
+    last_layer = tf.keras.layers.Dense(10, activation='linear', name="classification_head")(last_layer)
 
     # Model definition
     model = tf.keras.Model(
         inputs=inp,
-        outputs=last_layer)
+        outputs=last_layer,
+        name="simple_attention")
 
     if mode == tf.estimator.ModeKeys.TRAIN:
         logits = model(features, training=True)
